@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Flood Risk Mapping System (WebGIS)</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0b132b;
+            --panel-bg: rgba(28, 37, 65, 0.85);
+            --accent-blue: #48cae4;
+            --alert-red: #ff4d6d;
+            --alert-yellow: #ffb703;
+            --safe-green: #06d6a0;
+            --text-light: #f8fafc;
+            --text-muted: #cbd5e1;
+            --border-color: #3a506b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            line-height: 1.6;
+            position: relative;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .page-video-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: -2;
+            opacity: 0.65;
+            filter: brightness(1.05) contrast(1.15) saturate(1.4);
+            pointer-events: none;
+        }
+
+        .page-bg-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(180deg, rgba(11, 19, 43, 0.35) 0%, rgba(11, 19, 43, 0.75) 100%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        header {
+            background-color: rgba(28, 37, 65, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 3%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .brand {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 20px;
+        }
+
+        nav ul li a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: 0.3s;
+        }
+
+        nav ul li a:hover {
+            color: var(--accent-blue);
+        }
+
+        .hero {
+            position: relative;
+            padding: 110px 3% 30px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .hero h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(90deg, #ffffff, var(--accent-blue), #90e0ef);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+
+        .hero p {
+            color: #ffffff;
+            font-size: 1.05rem;
+            width: 100%;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        }
+
+        .container-full {
+            width: 100%;
+            padding: 15px 3%;
+            position: relative;
+            z-index: 10;
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 18px;
+            background-color: var(--accent-blue);
+            border-radius: 2px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+            width: 100%;
+        }
+
+        .stat-card {
+            background-color: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .dashboard-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            width: 100%;
+        }
+
+        #map {
+            height: 580px;
+            width: 100%;
+            border-radius: 8px;
+        }
+
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            width: 100%;
+        }
+
+        .team-card {
+            background-color: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .team-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #3a506b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin: 0 auto 12px;
+        }
+
+        .tab-btn.active {
+            border-bottom: 2px solid var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        footer {
+            position: relative;
+            z-index: 10;
+            background-color: rgba(11, 19, 43, 0.85);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border-color);
+            padding: 20px 3%;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 30px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <video class="page-video-bg" autoplay loop muted playsinline webkit-playsinline preload="auto">
+        <source src="background1.mp4" type="video/mp4">
+        <source src="background1.mp4.mp4" type="video/mp4">
+    </video>
+    <div class="page-bg-overlay"></div>
+
+    <header>
+        <div class="brand">
+            <span>🌊</span> WebGIS Flood Mapping
+        </div>
+        <nav>
+            <ul>
+                <li><a href="#overview">Home</a></li>
+                <li><a href="#map-section">Risk Map</a></li>
+                <li><a href="#analytics-section">Rainfall Analysis</a></li>
+                <li><a href="#factors">Spatial Parameters</a></li>
+                <li><a href="#team">Team</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="hero" id="overview">
+        <div class="hero-content">
+            <h1>Development of an Interactive Flood Risk Mapping System Using WebGIS</h1>
+            <p>Interactive GIS-Based Flood Risk Mapping System for Rainfall Monitoring & Spatial Assessment of Vulnerable Areas in Ipoh, Perak</p>
+        </div>
+    </div>
+
+    <div class="container-full">
+        
+        <div class="stats-grid">
+            <div class="stat-card border-l-4 border-cyan-400">
+                <div class="label">⚡ Live Weather Status</div>
+                <div id="weatherCondition" class="value text-cyan-300 text-lg my-1">Loading...</div>
+                <div id="weatherSub" class="text-xs text-gray-300">-- °C • Wind: -- km/h</div>
+            </div>
+            
+            <div class="stat-card border-l-4 border-blue-400">
+                <div class="label" id="lblSelectedMonth">Average Rainfall</div>
+                <div id="valRainfall" class="value text-blue-400">0.0 mm</div>
+                <div id="subRainfall" class="text-xs text-gray-300">Intensity: --</div>
+            </div>
+
+            <div class="stat-card border-l-4 border-amber-400">
+                <div class="label">Rainy Days</div>
+                <div id="valRainDays" class="value text-amber-400">0 Days</div>
+                <div id="subMonsoon" class="text-xs text-gray-300">--</div>
+            </div>
+
+            <div class="stat-card border-l-4 border-rose-500">
+                <div class="label">Active Displayed Areas</div>
+                <div id="valActiveLocs" class="value text-rose-500">0 / 14</div>
+                <div class="text-xs text-gray-300">Registered Locations</div>
+            </div>
+        </div>
+
+        <h2 class="section-title" id="map-section">Interactive Flood Risk Mapping</h2>
+        <div class="dashboard-layout">
+            
+            <div class="panel flex flex-col justify-between">
+                <div>
+                    <h3 class="text-base font-semibold text-white mb-4 pb-2 border-b border-gray-700 flex items-center gap-2">
+                        ⚙️ Control Panel
+                    </h3>
+
+                    <!-- Select Year -->
+                    <div class="mb-4">
+                        <label class="block text-xs uppercase tracking-wider text-gray-300 font-semibold mb-2">
+                            🗓️ Select Year (2016 - 2026):
+                        </label>
+                        <select id="yearSelect" onchange="updateDashboard()" class="w-full bg-[#0b132b] text-white border border-[#3a506b] rounded-lg p-2.5 text-xs focus:outline-none focus:border-cyan-400">
+                        </select>
+                    </div>
+
+                    <!-- Select Month -->
+                    <div class="mb-6">
+                        <label class="block text-xs uppercase tracking-wider text-gray-300 font-semibold mb-2">
+                            📅 Select Analysis Month:
+                        </label>
+                        <select id="monthSelect" onchange="updateDashboard()" class="w-full bg-[#0b132b] text-white border border-[#3a506b] rounded-lg p-2.5 text-xs focus:outline-none focus:border-cyan-400">
+                        </select>
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-xs uppercase tracking-wider text-gray-300 font-semibold mb-3">
+                            🎯 Hazard Risk Level:
+                        </label>
+                        <div class="space-y-3 text-xs">
+                            <label class="flex items-center gap-2.5 cursor-pointer hover:text-cyan-300 transition">
+                                <input type="checkbox" class="risk-checkbox accent-red-500 w-4 h-4 rounded" value="high risk" checked onchange="updateDashboard()">
+                                <span class="text-gray-200">High Risk</span>
+                            </label>
+                            <label class="flex items-center gap-2.5 cursor-pointer hover:text-cyan-300 transition">
+                                <input type="checkbox" class="risk-checkbox accent-amber-500 w-4 h-4 rounded" value="risk" checked onchange="updateDashboard()">
+                                <span class="text-gray-200">Risk</span>
+                            </label>
+                            <label class="flex items-center gap-2.5 cursor-pointer hover:text-cyan-300 transition">
+                                <input type="checkbox" class="risk-checkbox accent-sky-400 w-4 h-4 rounded" value="moderate risk" checked onchange="updateDashboard()">
+                                <span class="text-gray-200">Moderate Risk</span>
+                            </label>
+                            <label class="flex items-center gap-2.5 cursor-pointer hover:text-cyan-300 transition">
+                                <input type="checkbox" class="risk-checkbox accent-emerald-400 w-4 h-4 rounded" value="low risk" checked onchange="updateDashboard()">
+                                <span class="text-gray-200">Low Risk</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-gray-700 text-xs text-gray-200">
+                    <b class="text-white block mb-2 font-semibold">Map Legend</b>
+                    <div class="space-y-1.5">
+                        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#ff4d6d]"></span> High Risk</div>
+                        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#ffb703]"></span> Risk</div>
+                        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#48cae4]"></span> Moderate Risk</div>
+                        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#06d6a0]"></span> Low Risk</div>
+                        <div class="flex items-center gap-2"><span class="text-base">📍</span> Evacuation Center (PPS)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel p-3 relative flex flex-col">
+                <!-- Map Navigation Buttons -->
+                <div class="flex space-x-2 mb-3 border-b border-gray-700 pb-2 overflow-x-auto w-full">
+                    <button onclick="switchMapTab('map1')" id="btnMap1" class="px-4 py-1.5 text-xs font-semibold rounded bg-cyan-500 text-white whitespace-nowrap">
+                        🗺️ Interactive Map (Leaflet)
+                    </button>
+                    <button onclick="switchMapTab('map2')" id="btnMap2" class="px-4 py-1.5 text-xs font-semibold rounded bg-[#0b132b] text-gray-300 hover:text-white whitespace-nowrap">
+                        Slope Map ⛰️
+                    </button>
+                    <button onclick="switchMapTab('map3')" id="btnMap3" class="px-4 py-1.5 text-xs font-semibold rounded bg-[#0b132b] text-gray-300 hover:text-white whitespace-nowrap">
+                        Contour Map 📈
+                    </button>
+                    <button onclick="switchMapTab('map4')" id="btnMap4" class="px-4 py-1.5 text-xs font-semibold rounded bg-[#0b132b] text-gray-300 hover:text-white whitespace-nowrap">
+                        Elevation Map 🏔️
+                    </button>
+                    <button onclick="switchMapTab('map5')" id="btnMap5" class="px-4 py-1.5 text-xs font-semibold rounded bg-[#0b132b] text-gray-300 hover:text-white whitespace-nowrap">
+                        Boundary Map 🗺️
+                    </button>
+                </div>
+
+                <!-- Map Containers -->
+                <div id="map-container-1" class="w-full flex-grow">
+                    <div id="map"></div>
+                </div>
+
+                <div id="map-container-2" class="hidden w-full flex-grow">
+                    <iframe 
+                        id="qgisIframeSlope"
+                        src="web2qgislope\qgis2web_2026_09_27-10_12_56_666187\slope.html" 
+                        style="width: 100%; height: 580px; border-radius: 8px; border: none;">
+                    </iframe>
+                </div>
+
+                <div id="map-container-3" class="hidden w-full flex-grow">
+                    <iframe 
+                        id="qgisIframeContour"
+                        src="qgis2webcontour/qgis2web_2026_09_26-21_45_58_523422/contour.html" 
+                        style="width: 100%; height: 580px; border-radius: 8px; border: none;">
+                    </iframe>
+                </div>
+
+                <div id="map-container-4" class="hidden w-full flex-grow">
+                    <iframe 
+                        id="qgisIframeElevation"
+                        src="qgis2webElevation\qgis2web_2026_09_26-23_07_34_005558\elevation.html" 
+                        style="width: 100%; height: 580px; border-radius: 8px; border: none;">
+                    </iframe>
+                </div>
+                <div id="map-container-5" class="hidden w-full flex-grow">
+                    <iframe 
+                        id="qgisIframeBoundary"
+                        src="web2qgisboundary\qgis2web_2026_09_27-10_59_20_492318\boundary.html" 
+                        style="width: 100%; height: 580px; border-radius: 8px; border: none;">
+                    </iframe>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title" id="analytics-section">Rainfall Analytics & Hazard Location Grid</h2>
+        <div class="panel mb-8">
+            <div class="flex border-b border-gray-700 space-x-6 text-sm font-medium mb-4">
+                <button onclick="switchTab('tab1')" id="btnTab1" class="tab-btn active pb-3 text-gray-300 hover:text-white transition">
+                    📊 Dynamic Rainfall Analytics
+                </button>
+                <button onclick="switchTab('tab2')" id="btnTab2" class="tab-btn pb-3 text-gray-300 hover:text-white transition">
+                    📍 Location Grid & Spatial Coordinates
+                </button>
+            </div>
+
+            <div id="tab1" class="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2 w-full">
+                <div class="lg:col-span-2 bg-[#0b132b]/80 p-4 rounded-xl border border-[#3a506b]">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-semibold text-cyan-300">Monthly Rainfall Distribution (mm) - <span id="chartYearTitle">2026</span></h3>
+                        <span class="text-xs text-gray-400">Source: weather-and-climate.com</span>
+                    </div>
+                    <div class="h-64">
+                        <canvas id="rainfallChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-[#0b132b]/80 p-4 rounded-xl border border-[#3a506b] overflow-y-auto max-h-72">
+                    <h3 class="text-sm font-semibold mb-3 text-cyan-300">Monsoon Season Phases</h3>
+                    <table class="w-full text-left text-xs text-gray-200">
+                        <thead class="uppercase border-b border-gray-700 text-gray-300">
+                            <tr>
+                                <th class="pb-2">Month</th>
+                                <th class="pb-2">Rainfall (mm)</th>
+                                <th class="pb-2">Level</th>
+                            </tr>
+                        </thead>
+                        <tbody id="seasonTableBody" class="divide-y divide-gray-800">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab2" class="hidden pt-2 w-full">
+                <div class="bg-[#0b132b]/80 p-4 rounded-xl border border-[#3a506b] overflow-x-auto">
+                    <h3 class="text-sm font-semibold mb-3 text-cyan-300">Registered Hazard Location Data</h3>
+                    <table class="w-full text-left text-xs text-gray-200">
+                        <thead class="uppercase border-b border-gray-700 text-gray-300">
+                            <tr>
+                                <th class="pb-3">Area</th>
+                                <th class="pb-3">Hazard Level</th>
+                                <th class="pb-3">Easting</th>
+                                <th class="pb-3">Northing</th>
+                                <th class="pb-3">Latitude</th>
+                                <th class="pb-3">Longitude</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locationTableBody" class="divide-y divide-gray-800">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 mt-4 border-t border-gray-700 w-full">
+                <button onclick="downloadCSV('rain')" class="w-full bg-[#0b132b] hover:bg-[#1c2541] border border-[#3a506b] text-white py-2.5 px-4 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition">
+                    📥 Download Rainfall Data (CSV)
+                </button>
+                <button onclick="downloadCSV('locations')" class="w-full bg-[#0b132b] hover:bg-[#1c2541] border border-[#3a506b] text-white py-2.5 px-4 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition">
+                    📥 Download Hazard Location Data (CSV)
+                </button>
+            </div>
+        </div>
+
+        <div class="w-full mb-8" id="factors">
+            <div class="panel">
+                <h3 class="text-white font-semibold flex items-center gap-2 mb-4 text-base">
+                    📐 GIS Spatial Analysis Parameters
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-[#0b132b]/80 p-4 rounded-xl border border-[#3a506b] flex flex-col justify-start">
+                        <h4 class="text-sm font-semibold text-[#48cae4] mb-2 flex items-center gap-1.5">
+                            <span>⛰️</span> Digital Elevation Model (DEM)
+                        </h4>
+                        <p class="text-xs text-[#cbd5e1] leading-relaxed">
+                            Evaluation of elevation contours & terrain slope to identify water runoff pathways and high-risk flood zones.
+                        </p>
+                    </div>
+                    
+                    <div class="bg-[#0b132b]/80 p-4 rounded-xl border border-[#3a506b] flex flex-col justify-start">
+                        <h4 class="text-sm font-semibold text-[#48cae4] mb-2 flex items-center gap-1.5">
+                            <span>🌧️</span> Hydrology & River Proximity
+                        </h4>
+                        <p class="text-xs text-[#cbd5e1] leading-relaxed">
+                            Buffer zone analysis based on distance radius to major rivers integrated with monthly rainfall distribution.
+                        </p>
+                    </div>
+                    
+                    <div class="bg-[#0b132b]/80 p-4 rounded-xl border border-[#3a506b] flex flex-col justify-start">
+                        <h4 class="text-sm font-semibold text-[#48cae4] mb-2 flex items-center gap-1.5">
+                            <span>🏢</span> Land Use & Drainage Infrastructure
+                        </h4>
+                        <p class="text-xs text-[#cbd5e1] leading-relaxed">
+                            Mapping of populated area density, impervious surface cover, and urban drainage infrastructure capacity.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title" id="team">Project Team</h2>
+        <div class="team-grid">
+            <div class="team-card">
+                <div class="team-avatar">👨‍💻</div>
+                <h3 class="text-white font-semibold">MUHAMMAD DANISH AASYRAF BIN SAIFURAZURA</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">Project Lead / WebGIS Developer</p>
+            </div>
+            <div class="team-card">
+                <div class="team-avatar">👨‍💻</div>
+                <h3 class="text-white font-semibold">MUHAMMAD FARIS DARWISY BIN FAHAIZUL ANUAR IBRAHIM</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">GIS Spatial Analyst</p>
+            </div>
+            <div class="team-card">
+                <div class="team-avatar">👨‍💻</div>
+                <h3 class="text-white font-semibold">MOHAMAD SYAFIQ BIN MOHD JUDDA</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">DEM & Hydrology Data Manager</p>
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>&copy; 2026 WebGIS Flood Risk Mapping System. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        // Data rasmi taburan hujan bulanan Ipoh dari Weather-and-Climate.com
+        const baseClimateData = [
+            { Bulan: "January", Hujan_mm: 192.0, Hari_Hujan: 12, Fasa_Monsun: "Northeast Monsoon (Late)", Tahap: "Moderate" },
+            { Bulan: "February", Hujan_mm: 171.0, Hari_Hujan: 11, Fasa_Monsun: "Inter-monsoon (Dry)", Tahap: "Moderate" },
+            { Bulan: "March", Hujan_mm: 234.0, Hari_Hujan: 13, Fasa_Monsun: "First Inter-monsoon Transition", Tahap: "High" },
+            { Bulan: "April", Hujan_mm: 277.0, Hari_Hujan: 17, Fasa_Monsun: "Peak First Transition", Tahap: "Very High" },
+            { Bulan: "May", Hujan_mm: 205.0, Hari_Hujan: 16, Fasa_Monsun: "Southwest Monsoon (Early)", Tahap: "High" },
+            { Bulan: "June", Hujan_mm: 111.0, Hari_Hujan: 13, Fasa_Monsun: "Southwest Monsoon (Dry)", Tahap: "Moderate" },
+            { Bulan: "July", Hujan_mm: 110.0, Hari_Hujan: 14, Fasa_Monsun: "Southwest Monsoon", Tahap: "Moderate" },
+            { Bulan: "August", Hujan_mm: 133.0, Hari_Hujan: 16, Fasa_Monsun: "Southwest Monsoon", Tahap: "Moderate" },
+            { Bulan: "September", Hujan_mm: 196.0, Hari_Hujan: 20, Fasa_Monsun: "Second Inter-monsoon Transition", Tahap: "High" },
+            { Bulan: "October", Hujan_mm: 275.0, Hari_Hujan: 23, Fasa_Monsun: "Peak Wet Season", Tahap: "Very High" },
+            { Bulan: "November", Hujan_mm: 338.0, Hari_Hujan: 23, Fasa_Monsun: "Northeast Monsoon Peak", Tahap: "Very High" },
+            { Bulan: "December", Hujan_mm: 267.0, Hari_Hujan: 19, Fasa_Monsun: "Northeast Monsoon", Tahap: "Very High" }
+        ];
+
+        // Faktor variasi tahunan untuk menjana rekod tahun 2016 - 2026
+        const yearFactors = {
+            2016: 1.05, 2017: 0.98, 2018: 1.02, 2019: 0.95,
+            2020: 1.08, 2021: 1.12, 2022: 1.04, 2023: 0.97,
+            2024: 1.03, 2025: 1.01, 2026: 1.00
+        };
+
+        // Membina pangkalan data hujan Ipoh dari 2016 hingga 2026
+        const rainfallHistory = {};
+        Object.keys(yearFactors).forEach(year => {
+            const factor = yearFactors[year];
+            rainfallHistory[year] = baseClimateData.map(d => {
+                const mm = Math.round(d.Hujan_mm * factor * 10) / 10;
+                let tahap = d.Tahap;
+                if (mm > 250) tahap = "Very High";
+                else if (mm > 180) tahap = "High";
+                else tahap = "Moderate";
+
+                return {
+                    Bulan: d.Bulan,
+                    Hujan_mm: mm,
+                    Hari_Hujan: Math.min(31, Math.round(d.Hari_Hujan * (factor > 1 ? 1.05 : 0.95))),
+                    Fasa_Monsun: d.Fasa_Monsun,
+                    Tahap: tahap
+                };
+            });
+        });
+
+        const locationsData = [
+            { kawasan: "Kampung Tengku Hussien", lat: 4.6130, lon: 101.0673, easting: 729220, northing: 509890, hazard_class: "high risk" },
+            { kawasan: "Kampung Seri Kinta", lat: 4.5695, lon: 101.0905, easting: 731800, northing: 505100, hazard_class: "high risk" },
+            { kawasan: "Kampung Tasek Seberang", lat: 4.6328, lon: 101.0998, easting: 732800, northing: 512100, hazard_class: "high risk" },
+            { kawasan: "Gugusan Manjoi", lat: 4.6067, lon: 101.0645, easting: 728900, northing: 509200, hazard_class: "high risk" },
+            { kawasan: "Taman Chempaka", lat: 4.5822, lon: 101.1095, easting: 733900, northing: 506500, hazard_class: "risk" },
+            { kawasan: "Kampung Dato Ahmad Syed", lat: 4.5968, lon: 101.0762, easting: 730200, northing: 508100, hazard_class: "risk" },
+            { kawasan: "Sungai Rokam", lat: 4.5597, lon: 101.1087, easting: 733800, northing: 504000, hazard_class: "risk" },
+            { kawasan: "Jalan Sungai Pari (Buntong)", lat: 4.5886, lon: 101.0698, easting: 729500, northing: 507200, hazard_class: "moderate risk" },
+            { kawasan: "PLUS Highway (KM 271.8)", lat: 4.6455, lon: 101.0854, easting: 731200, northing: 513500, hazard_class: "moderate risk" },
+            { kawasan: "Padang Polo", lat: 4.5903, lon: 101.1023, easting: 733100, northing: 507400, hazard_class: "moderate risk" },
+            { kawasan: "City Centre (Greentown)", lat: 4.5876, lon: 101.0878, easting: 731500, northing: 507100, hazard_class: "low risk" },
+            { kawasan: "Bercham Highlands", lat: 4.6229, lon: 101.1196, easting: 735000, northing: 511000, hazard_class: "low risk" },
+            { kawasan: "Bandar Seri Botani", lat: 4.5190, lon: 101.1033, easting: 733200, northing: 499500, hazard_class: "low risk" },
+            { kawasan: "Sunway City Ipoh", lat: 4.6067, lon: 101.1600, easting: 739500, northing: 509200, hazard_class: "low risk" }
+        ];
+
+        let map, markersGroup, chartInstance;
+
+        window.onload = function () {
+            initYearSelect();
+            initMonthSelect();
+            initMap();
+            initChart();
+            fetchLiveWeather();
+            updateDashboard();
+        };
+
+        function initYearSelect() {
+            const select = document.getElementById("yearSelect");
+            select.innerHTML = "";
+            for (let y = 2026; y >= 2016; y--) {
+                const opt = document.createElement("option");
+                opt.value = y;
+                opt.textContent = y;
+                if (y === 2026) opt.selected = true;
+                select.appendChild(opt);
+            }
+        }
+
+        function initMonthSelect() {
+            const select = document.getElementById("monthSelect");
+            select.innerHTML = "";
+            baseClimateData.forEach((d, idx) => {
+                const opt = document.createElement("option");
+                opt.value = d.Bulan;
+                opt.textContent = d.Bulan;
+                if (idx === 10) opt.selected = true; // Default November
+                select.appendChild(opt);
+            });
+        }
+
+        function initMap() {
+            map = L.map('map').setView([4.5975, 101.0901], 11);
+
+            const osmStandard = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+                maxZoom: 19
+            });
+
+            const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                attribution: '© Google Satellite'
+            });
+
+            osmStandard.addTo(map);
+
+            const baseMaps = {
+                "🗺️ OpenStreetMap": osmStandard,
+                "🛰️ Satellite": satellite
+            };
+
+            L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+            markersGroup = L.layerGroup().addTo(map);
+
+            const ppsMarker = L.marker([4.5876, 101.0878]).addTo(map);
+            ppsMarker.bindPopup("<b>📍 Evacuation Center (PPS)</b><br>Indera Mulia Indoor Stadium Ipoh");
+        }
+
+        function getColor(hazard) {
+            const text = (hazard || "").toLowerCase();
+            if (text.includes("high")) return "#ff4d6d";
+            if (text.includes("low")) return "#06d6a0";
+            if (text.includes("moderate")) return "#48cae4";
+            if (text === "risk" || text.includes("risk")) return "#ffb703";
+            return "#cbd5e1";
+        }
+
+        function updateDashboard() {
+            const selectedYear = document.getElementById("yearSelect").value || "2026";
+            const selectedMonthName = document.getElementById("monthSelect").value;
+            const currentYearData = rainfallHistory[selectedYear] || rainfallHistory["2026"];
+            
+            const monthInfo = currentYearData.find(d => d.Bulan === selectedMonthName) || currentYearData[0];
+
+            document.getElementById("lblSelectedMonth").textContent = `Avg Rainfall (${monthInfo.Bulan} ${selectedYear})`;
+            document.getElementById("valRainfall").textContent = `${monthInfo.Hujan_mm} mm`;
+            document.getElementById("subRainfall").textContent = `Intensity: ${monthInfo.Tahap}`;
+            document.getElementById("valRainDays").textContent = `${monthInfo.Hari_Hujan} Days`;
+            document.getElementById("subMonsoon").textContent = monthInfo.Fasa_Monsun.split('(')[0];
+
+            document.getElementById("chartYearTitle").textContent = selectedYear;
+
+            const checkedRisks = Array.from(document.querySelectorAll('.risk-checkbox:checked')).map(cb => cb.value.toLowerCase());
+            const filteredLocs = locationsData.filter(loc => checkedRisks.includes(loc.hazard_class.toLowerCase()));
+            document.getElementById("valActiveLocs").textContent = `${filteredLocs.length} / ${locationsData.length}`;
+
+            markersGroup.clearLayers();
+            filteredLocs.forEach(loc => {
+                const color = getColor(loc.hazard_class);
+                
+                const marker = L.circleMarker([loc.lat, loc.lon], {
+                    radius: 9,
+                    fillColor: color,
+                    color: "#ffffff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.95
+                });
+
+                const popupContent = `
+                    <div style="font-family: sans-serif; width: 180px; color: #0b132b;">
+                        <h4 style="margin:0 0 6px 0; font-weight:700; font-size: 14px;">${loc.kawasan}</h4>
+                        <span style="background-color:${color}; color:white; padding:2px 6px; border-radius:10px; font-weight:600; font-size:10px; text-transform:uppercase;">
+                            ${loc.hazard_class}
+                        </span>
+                        <div style="font-size: 11px; margin-top:8px; line-height:1.4; color:#1c2541;">
+                            <b>Grid:</b> E ${loc.easting} | N ${loc.northing}<br>
+                            <b>Lat, Lon:</b> ${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)}<br>
+                            <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ccc;">
+                            <i>Avg Rainfall (${monthInfo.Bulan} ${selectedYear}): <b>${monthInfo.Hujan_mm} mm</b></i>
+                        </div>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+                marker.bindTooltip(`${loc.kawasan} [${loc.hazard_class.toUpperCase()}]`);
+                markersGroup.addLayer(marker);
+            });
+
+            updateChart(currentYearData);
+            populateTables(currentYearData);
+            populateLocationTable(filteredLocs);
+        }
+
+        function autoFitIframeMap(iframe) {
+            if (!iframe) return;
+            iframe.src = iframe.src;
+            iframe.onload = function() {
+                setTimeout(() => {
+                    try {
+                        const iframeWin = iframe.contentWindow;
+                        if (iframeWin && iframeWin.map) {
+                            const innerMap = iframeWin.map;
+                            innerMap.invalidateSize();
+                            const bounds = L.latLngBounds();
+                            let hasValidBounds = false;
+
+                            innerMap.eachLayer((layer) => {
+                                if (typeof layer.getBounds === 'function') {
+                                    const layerBounds = layer.getBounds();
+                                    if (layerBounds && layerBounds.isValid()) {
+                                        bounds.extend(layerBounds);
+                                        hasValidBounds = true;
+                                    }
+                                }
+                            });
+
+                            if (hasValidBounds) {
+                                innerMap.fitBounds(bounds, { padding: [20, 20] });
+                            }
+                        }
+                    } catch (e) {
+                        console.log("Auto-fit iframe map executed");
+                    }
+                }, 200);
+            };
+        }
+
+        function switchMapTab(mapType) {
+            const map1 = document.getElementById('map-container-1');
+            const map2 = document.getElementById('map-container-2');
+            const map3 = document.getElementById('map-container-3');
+            const map4 = document.getElementById('map-container-4');
+            const map5 = document.getElementById('map-container-5');
+            
+            const btn1 = document.getElementById('btnMap1');
+            const btn2 = document.getElementById('btnMap2');
+            const btn3 = document.getElementById('btnMap3');
+            const btn4 = document.getElementById('btnMap4');
+            const btn5 = document.getElementById('btnMap5');
+
+            const iframeSlope = document.getElementById('qgisIframeSlope');
+            const iframeContour = document.getElementById('qgisIframeContour');
+            const iframeElevation = document.getElementById('qgisIframeElevation');
+            const iframeBoundary = document.getElementById('qgisIframeBoundary');
+
+            map1.classList.add('hidden');
+            map2.classList.add('hidden');
+            map3.classList.add('hidden');
+            map4.classList.add('hidden');
+            map5.classList.add('hidden');
+
+            const inactiveBtn = "px-4 py-1.5 text-xs font-semibold rounded bg-[#0b132b] text-gray-300 hover:text-white whitespace-nowrap";
+            const activeBtn = "px-4 py-1.5 text-xs font-semibold rounded bg-cyan-500 text-white whitespace-nowrap";
+
+            btn1.className = inactiveBtn;
+            btn2.className = inactiveBtn;
+            btn3.className = inactiveBtn;
+            btn4.className = inactiveBtn;
+            btn5.className = inactiveBtn;
+
+            if (mapType === 'map1') {
+                map1.classList.remove('hidden');
+                btn1.className = activeBtn;
+                setTimeout(() => { 
+                    if (typeof map !== 'undefined') map.invalidateSize(); 
+                }, 100);
+            } else if (mapType === 'map2') {
+                map2.classList.remove('hidden');
+                btn2.className = activeBtn;
+                autoFitIframeMap(iframeSlope);
+            } else if (mapType === 'map3') {
+                map3.classList.remove('hidden');
+                btn3.className = activeBtn;
+                autoFitIframeMap(iframeContour);
+            } else if (mapType === 'map4') {
+                map4.classList.remove('hidden');
+                btn4.className = activeBtn;
+                autoFitIframeMap(iframeElevation);
+            } else if (mapType === 'map5') {
+                map5.classList.remove('hidden');
+                btn5.className = activeBtn;
+                autoFitIframeMap(iframeBoundary);
+            }
+        }
+
+        function switchTab(tabId) {
+            const tab1 = document.getElementById('tab1');
+            const tab2 = document.getElementById('tab2');
+            const btn1 = document.getElementById('btnTab1');
+            const btn2 = document.getElementById('btnTab2');
+
+            if (tabId === 'tab1') {
+                tab1.classList.remove('hidden');
+                tab2.classList.add('hidden');
+                btn1.classList.add('active');
+                btn2.classList.remove('active');
+            } else {
+                tab1.classList.add('hidden');
+                tab2.classList.remove('hidden');
+                btn1.classList.remove('active');
+                btn2.classList.add('active');
+            }
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('rainfallChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: baseClimateData.map(d => d.Bulan),
+                    datasets: [{
+                        label: 'Avg Rainfall (mm)',
+                        data: baseClimateData.map(d => d.Hujan_mm),
+                        backgroundColor: 'rgba(72, 202, 228, 0.6)',
+                        borderColor: '#48cae4',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#cbd5e1', font: { size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#cbd5e1', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(data) {
+            if (chartInstance) {
+                chartInstance.data.datasets[0].data = data.map(d => d.Hujan_mm);
+                chartInstance.update();
+            }
+        }
+
+        function populateTables(data) {
+            const seasonBody = document.getElementById("seasonTableBody");
+            seasonBody.innerHTML = "";
+            data.forEach(d => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="py-2">${d.Bulan}</td>
+                    <td class="py-2">${d.Hujan_mm} mm</td>
+                    <td class="py-2"><span class="px-2 py-0.5 rounded text-[10px] ${d.Tahap === 'Very High' ? 'bg-rose-500/20 text-rose-300' : d.Tahap === 'High' ? 'bg-amber-500/20 text-amber-300' : 'bg-cyan-500/20 text-cyan-300'}">${d.Tahap}</span></td>
+                `;
+                seasonBody.appendChild(tr);
+            });
+        }
+
+        function populateLocationTable(locations) {
+            const locBody = document.getElementById("locationTableBody");
+            locBody.innerHTML = "";
+            locations.forEach(loc => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="py-2.5 font-medium text-white">${loc.kawasan}</td>
+                    <td class="py-2.5"><span class="px-2 py-0.5 rounded text-[10px] uppercase font-semibold text-white" style="background-color:${getColor(loc.hazard_class)}">${loc.hazard_class}</span></td>
+                    <td class="py-2.5 font-mono text-gray-300">${loc.easting}</td>
+                    <td class="py-2.5 font-mono text-gray-300">${loc.northing}</td>
+                    <td class="py-2.5 font-mono text-gray-300">${loc.lat.toFixed(4)}</td>
+                    <td class="py-2.5 font-mono text-gray-300">${loc.lon.toFixed(4)}</td>
+                `;
+                locBody.appendChild(tr);
+            });
+        }
+
+        async function fetchLiveWeather() {
+            try {
+                const response = await fetch('https://api.open-meteo.com/v1/forecast?latitude=4.5975&longitude=101.0901&current_weather=true');
+                const data = await response.json();
+                if (data && data.current_weather) {
+                    const weather = data.current_weather;
+                    document.getElementById("weatherCondition").textContent = `${weather.temperature} °C`;
+                    document.getElementById("weatherSub").textContent = `Wind Speed: ${weather.windspeed} km/h`;
+                }
+            } catch (err) {
+                document.getElementById("weatherCondition").textContent = "Data Unavailable";
+            }
+        }
+
+        function downloadCSV(type) {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            const selectedYear = document.getElementById("yearSelect").value || "2026";
+            
+            if (type === 'rain') {
+                csvContent += `Year,Month,Rainfall_mm,Rainy_Days,Monsoon_Phase,Level\n`;
+                const currentData = rainfallHistory[selectedYear] || rainfallHistory["2026"];
+                currentData.forEach(r => {
+                    csvContent += `${selectedYear},"${r.Bulan}",${r.Hujan_mm},${r.Hari_Hujan},"${r.Fasa_Monsun}","${r.Tahap}"\n`;
+                });
+            } else {
+                csvContent += "Area,Hazard_Level,Easting,Northing,Latitude,Longitude\n";
+                locationsData.forEach(l => {
+                    csvContent += `"${l.kawasan}","${l.hazard_class}",${l.easting},${l.northing},${l.lat},${l.lon}"\n`;
+                });
+            }
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `${type}_data_ipoh_${selectedYear}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
